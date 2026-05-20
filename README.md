@@ -351,6 +351,38 @@ If changing the thread value appears to do nothing, the current pipeline may be 
 
 ---
 
+## GPU Support
+
+LoCapt is currently **CPU-only**.
+
+The current code loads Faster-Whisper like this:
+
+```python
+WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)
+```
+
+That means LoCapt will not currently use an NVIDIA GPU, even on a computer that has one.
+
+Use these settings/expectations for now:
+
+```text
+Device: CPU only
+Compute type: int8
+Recommended models: base, small, or medium
+```
+
+Recommended starting point:
+
+```text
+small
+```
+
+Use `base` if live captions lag too much. Try `medium` only if the laptop can keep up.
+
+GPU/CUDA support can be added later, but it should not be documented as supported until it has been tested on an NVIDIA machine.
+
+---
+
 ## Troubleshooting
 
 ### The model download is slow
@@ -476,10 +508,6 @@ sounddevice
 numpy
 scipy
 PyQt6
-```
-
-Only keep `PyQt6` if the current version of LoCapt uses it.
-
 ---
 
 ## Notes
@@ -491,17 +519,6 @@ Only keep `PyQt6` if the current version of LoCapt uses it.
 
 ---
 
-## License
-
-Add your chosen license here.
-
-Example:
-
-```text
-MIT License
-```
-
----
 
 ## TODO
 
@@ -509,7 +526,7 @@ Possible future improvements:
 
 * Installer or one-click launcher
 * Automatic model download UI
-* Better GPU detection
+* GPU impl
 * Better crash-safe stop/start handling
 * Saved profiles for different audio setups
 * Export transcript to text file
