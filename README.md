@@ -1,5 +1,52 @@
 # LoCapt
 
+LoCapt is a local live-captioning and translation tool for Windows. It can listen to system audio, microphone audio, or both at the same time, then transcribe or translate speech using Faster Whisper.
+
+The app is designed for local/offline use after the model files are downloaded.
+
+## Features
+
+- Local speech transcription using Faster Whisper
+- Local translation to English
+- System audio capture using WASAPI loopback
+- Microphone capture
+- Split panes for system audio and microphone when both are enabled
+- Device sweep tools for finding the active speaker or microphone
+- Cache for last-used microphone and system audio devices
+- Adjustable chunk size, overlap, silence cutoff, CPU thread count, and max lag
+- Optional source-language text shown beside English translation
+- Collapsible settings area
+- Always-on-top mode
+
+## Requirements
+
+- Windows 10 or Windows 11
+- Python 3.10 or newer
+- A working microphone or system audio output device
+- Enough disk space for Whisper model files
+
+Recommended:
+
+- Python 3.11
+- 8 GB RAM minimum
+- 16 GB RAM recommended
+- Modern Intel or AMD CPU
+
+## Project Structure
+
+A simple setup can look like this:
+
+```text
+LoCapt/
+├─ LoCapt.py
+├─ models/
+│  └─ fast-whisper-small/
+│     ├─ config.json
+│     ├─ model.bin
+│     └─ other model files...
+├─ .venv/
+└─ locapt_settings_cache.json# LoCapt
+
 LoCapt is a local live captioning and translation tool for Windows. It can listen to your microphone, system audio, or both, then transcribe and optionally translate speech using local Faster-Whisper models.
 
 The main goal is to make meetings, videos, calls, and language learning easier without needing a cloud transcription service.
