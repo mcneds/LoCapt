@@ -32,7 +32,7 @@ Recommended:
 - 16 GB RAM recommended
 - Modern Intel or AMD CPU
 
-gpu untested, edit this line in `LoCapt.py` for now to try for yourself:
+NVIDIA GPU mode untested, edit this line in `LoCapt.py` for now to try for yourself:
 
 `self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
 
