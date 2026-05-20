@@ -32,6 +32,9 @@ Recommended:
 - 16 GB RAM recommended
 - Modern Intel or AMD CPU
 
+gpu untested, edit this line in loCapt.py for now to try for yourself: `self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
+and change it to: `self.model = WhisperModel(model_key, device="cuda", compute_type="float16")` . change compute_type to `int8_float16` for lower vram gpus.
+
 ## Project Structure
 
 A simple setup can look like this:
@@ -69,22 +72,8 @@ The main goal is to make meetings, videos, calls, and language learning easier w
 
 ---
 
-## Requirements
 
-* Windows 10 or Windows 11
-* Python 3.10, 3.11, or 3.12 recommended
-* A working microphone, system audio device, or both
-* Enough disk space for Whisper models
 
-Recommended hardware:
-
-* CPU-only: small or medium model
-* NVIDIA GPU: medium, large-v2, or large-v3 depending on VRAM*
-* 8 GB RAM minimum
-* 16 GB+ RAM recommended for larger models
-
-gpu untested, edit this line in loCapt.py for now to try for yourself: `self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
-and change it to: `self.model = WhisperModel(model_key, device="cuda", compute_type="float16")` . change compute_type to `int8_float16` for lower vram gpus.
 
 ---
 
