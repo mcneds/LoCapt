@@ -32,8 +32,15 @@ Recommended:
 - 16 GB RAM recommended
 - Modern Intel or AMD CPU
 
-gpu untested, edit this line in loCapt.py for now to try for yourself: `self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
-and change it to: `self.model = WhisperModel(model_key, device="cuda", compute_type="float16")` . change compute_type to `int8_float16` for lower vram gpus.
+gpu untested, edit this line in `LoCapt.py` for now to try for yourself:
+
+`self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
+
+and change it to: 
+
+`self.model = WhisperModel(model_key, device="cuda", compute_type="float16")` 
+
+change compute_type to `int8_float16` for lower vram gpus.
 
 ## Project Structure
 
