@@ -79,9 +79,12 @@ The main goal is to make meetings, videos, calls, and language learning easier w
 Recommended hardware:
 
 * CPU-only: small or medium model
-* NVIDIA GPU: medium, large-v2, or large-v3 depending on VRAM
+* NVIDIA GPU: medium, large-v2, or large-v3 depending on VRAM*
 * 8 GB RAM minimum
 * 16 GB+ RAM recommended for larger models
+
+gpu untested, edit this line in loCapt.py for now to try for yourself: `self.model = WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)`
+and change it to: `self.model = WhisperModel(model_key, device="cuda", compute_type="float16")` . change compute_type to `int8_float16` for lower vram gpus.
 
 ---
 
@@ -104,7 +107,7 @@ LoCapt/
 
 ## Setup
 
-Open PowerShell in the project folder.
+Open PowerShell in the project folder/use the terminal in your IDE.
 
 ### 1. Create a virtual environment
 
@@ -136,35 +139,17 @@ Then activate again:
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
-
-If the project does not have a `requirements.txt` yet, install the common dependencies manually:
-
-```powershell
-pip install faster-whisper sounddevice numpy scipy
-```
-
-Depending on the current UI version, you may also need:
-
-```powershell
-pip install PyQt6
-```
-
 ---
 
-## Faster-Whisper Model Downloads
+## Faster-Whisper Models
 
-LoCapt uses Faster-Whisper models. Models are downloaded automatically the first time you run a model name, as long as your internet connection allows Hugging Face downloads.
+LoCapt uses Faster-Whisper models. Models are not downloaded automatically, I have tested these:
 
-Common model choices:
+[whisper large-v2](https://huggingface.co/guillaumekln/faster-whisper-large-v2)
 
-```text
-tiny
-base
-small
-medium
-large-v2
-large-v3
-```
+[whisper small](https://huggingface.co/guillaumekln/faster-whisper-small/tree/main)
+
+The large model does not run well on my thinkpad, but runs decent with 8 threads on the small version.
 
 Recommended starting points:
 
@@ -366,25 +351,9 @@ base → small → medium → large-v3
 
 If captions lag badly, lower the model size.
 
-### Compute type
-
-Common CPU option:
-
-```text
-int8
-```
-
-Common GPU option:
-
-```text
-float16
-```
-
-If GPU mode fails, use CPU mode first to confirm the app works.
-
 ### Threads / workers
 
-Increasing thread count does not always improve performance. More threads can help until the CPU is saturated, but too many threads can make performance worse because of overhead and contention.
+Increasing thread count does not always improve performance. More threads can help until the CPU is saturated, but too many threads can make performance worse because of overhead and contention. You must reload the model to change the number of threds used.
 
 Good starting points:
 
@@ -396,38 +365,6 @@ Good starting points:
 | 12-core+ CPU |           8 to 12 |
 
 If changing the thread value appears to do nothing, the current pipeline may be bottlenecked by audio chunking, model inference, queue handling, or the selected backend rather than raw CPU thread count.
-
----
-
-## GPU Support
-
-LoCapt is currently **CPU-only**.
-
-The current code loads Faster-Whisper like this:
-
-```python
-WhisperModel(model_key, device="cpu", compute_type="int8", cpu_threads=threads)
-```
-
-That means LoCapt will not currently use an NVIDIA GPU, even on a computer that has one.
-
-Use these settings/expectations for now:
-
-```text
-Device: CPU only
-Compute type: int8
-Recommended models: base, small, or medium
-```
-
-Recommended starting point:
-
-```text
-small
-```
-
-Use `base` if live captions lag too much. Try `medium` only if the laptop can keep up.
-
-GPU/CUDA support can be added later, but it should not be documented as supported until it has been tested on an NVIDIA machine.
 
 ---
 
@@ -451,7 +388,7 @@ Then manually pre-download:
 python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
 ```
 
-If you are on a corporate network, the download may be blocked by proxy or SSL rules. Download the model on another network or configure the required proxy/certificate settings.
+If you are on a corporate network, the download may be blocked by proxy or SSL rules. Download the model on another network or configure the required proxy/certificate settings. I downloaded manually from hugging face to solve this same issue and dragged the files into a directory of my chosen name. The program searches for folders in the models folder that contain valid config.json and model.bin files, then displays the name of the corresponding folder to choose from.
 
 ### No microphone audio is detected
 
@@ -532,30 +469,6 @@ Then update packages:
 pip install --upgrade faster-whisper sounddevice numpy scipy
 ```
 
-If using PyQt:
-
-```powershell
-pip install --upgrade PyQt6
-```
-
----
-
-## Creating `requirements.txt`
-
-If needed, generate a requirements file from your current environment:
-
-```powershell
-pip freeze > requirements.txt
-```
-
-A minimal starting `requirements.txt` may look like:
-
-```text
-faster-whisper
-sounddevice
-numpy
-scipy
-PyQt6
 ---
 
 ## Notes
