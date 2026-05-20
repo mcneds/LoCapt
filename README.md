@@ -46,6 +46,7 @@ LoCapt/
 │     └─ other model files...
 ├─ .venv/
 └─ locapt_settings_cache.json# LoCapt
+```
 
 LoCapt is a local live captioning and translation tool for Windows. It can listen to your microphone, system audio, or both, then transcribe and optionally translate speech using local Faster-Whisper models.
 
