@@ -9,7 +9,6 @@ import tkinter as tk
 from tkinter import ttk
 
 import numpy as np
-import sounddevice as sd
 import pyaudiowpatch as pyaudio
 from faster_whisper import WhisperModel
 
@@ -138,6 +137,26 @@ def mono_from_float32_bytes(data: bytes, channels: int) -> np.ndarray:
         usable = (len(audio) // channels) * channels
         audio = audio[:usable].reshape(-1, channels).mean(axis=1)
     return audio.astype(np.float32, copy=False)
+
+
+def mono_from_int16_bytes(data: bytes, channels: int) -> np.ndarray:
+    audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+    if channels > 1 and len(audio) >= channels:
+        usable = (len(audio) // channels) * channels
+        audio = audio[:usable].reshape(-1, channels).mean(axis=1)
+    return audio.astype(np.float32, copy=False)
+
+
+def device_is_loopback(dev: dict) -> bool:
+    if bool(dev.get("isLoopbackDevice", False)):
+        return True
+    name = str(dev.get("name", "")).lower()
+    return "loopback" in name or "wasapi" in name and "loopback" in name
+
+
+def audio_score(rms: float, peak: float) -> float:
+    # RMS catches sustained speech. Peak catches short tap/clap tests.
+    return max(float(rms), float(peak) * 0.35)
 
 
 class LoCaptApp:
@@ -447,15 +466,31 @@ class LoCaptApp:
         labels = []
         mapping = {}
         try:
-            devices = sd.query_devices()
-            for i, dev in enumerate(devices):
-                if int(dev.get("max_input_channels", 0)) <= 0:
-                    continue
-                label = f"{i}: {dev.get('name', f'Device {i}')} | in:{int(dev.get('max_input_channels', 0))}"
-                labels.append(label)
-                mapping[label] = i
+            with pyaudio.PyAudio() as p:
+                default_input_index = None
+                try:
+                    default_input_index = int(p.get_default_input_device_info().get("index"))
+                except Exception:
+                    default_input_index = None
+
+                for i in range(p.get_device_count()):
+                    dev = p.get_device_info_by_index(i)
+                    channels = int(dev.get("maxInputChannels", 0) or 0)
+                    if channels <= 0:
+                        continue
+                    if device_is_loopback(dev):
+                        continue
+
+                    index = int(dev.get("index", i))
+                    rate = int(float(dev.get("defaultSampleRate", 48000) or 48000))
+                    name = str(dev.get("name", f"Device {index}"))
+                    default_mark = " default" if index == default_input_index else ""
+                    label = f"{index}: {name} | in:{channels} | {rate} Hz{default_mark}"
+                    labels.append(label)
+                    mapping[label] = dev
         except Exception:
             pass
+
         if not labels:
             labels = ["Default microphone"]
             mapping[labels[0]] = None
@@ -616,30 +651,54 @@ class LoCaptApp:
         self.root.destroy()
 
     def mic_audio_thread(self):
+        stream = None
         try:
-            device = self.mic_map.get(self.mic_var.get())
-            source_rate = int(sd.query_devices(device).get("default_samplerate", 48000)) if device is not None else 48000
+            dev = self.mic_map.get(self.mic_var.get())
+            if not dev:
+                raise RuntimeError("No microphone selected. Click ↻, then Sweep mic while making sound near the mic.")
 
-            def callback(indata, frames, time_info, status):
-                audio = np.asarray(indata, dtype=np.float32)
-                mono = audio.mean(axis=1) if audio.ndim == 2 else audio
-                self.push_audio(self.mic_state, mono, source_rate)
+            index = int(dev["index"])
+            channels = max(1, min(2, int(dev.get("maxInputChannels", 1) or 1)))
+            source_rate = int(float(dev.get("defaultSampleRate", 48000) or 48000))
+            frames = max(256, int(source_rate * 0.25))
 
-            self.status_var.set("Opening microphone...")
-            with sd.InputStream(
-                samplerate=source_rate,
-                channels=1,
-                dtype="float32",
-                blocksize=int(source_rate * 0.25),
-                device=device,
-                callback=callback,
-            ):
-                self.status_var.set(f"Listening to microphone | source rate: {source_rate} Hz")
+            self.status_var.set(f"Opening microphone: {dev.get('name', index)}")
+
+            with pyaudio.PyAudio() as p:
+                stream = p.open(
+                    format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=source_rate,
+                    frames_per_buffer=frames,
+                    input=True,
+                    input_device_index=index,
+                )
+
+                self.status_var.set(f"Listening to microphone: {dev.get('name', index)} | {source_rate} Hz")
+
                 while not self.stop_event.is_set():
-                    time.sleep(0.1)
+                    try:
+                        data = stream.read(frames, exception_on_overflow=False)
+                    except Exception:
+                        if self.stop_event.is_set():
+                            break
+                        raise
+
+                    mono = mono_from_int16_bytes(data, channels)
+                    self.push_audio(self.mic_state, mono, source_rate)
+
         except Exception as e:
-            self.mic_state.text_queue.put(f"\n[mic audio error] {e}\n")
-            self.stop_event.set()
+            if not self.stop_event.is_set():
+                self.mic_state.text_queue.put(f"\n[mic audio error] {e}\n")
+                self.stop_event.set()
+
+        finally:
+            try:
+                if stream is not None:
+                    stream.stop_stream()
+                    stream.close()
+            except Exception:
+                pass
 
     def system_audio_thread(self):
         stream = None
@@ -824,7 +883,7 @@ class LoCaptApp:
             self.mic_sweep_tree.delete(item)
 
     def mic_sweep_thread(self):
-        devices = [(label, index) for label, index in self.mic_map.items()]
+        devices = [(label, dev) for label, dev in self.mic_map.items()]
         if not devices:
             self.root.after(0, lambda: self.mic_scan_status_var.set("No microphone devices found."))
             self.root.after(0, lambda: self.mic_scan_button.configure(text="Sweep mic"))
@@ -832,46 +891,50 @@ class LoCaptApp:
 
         scan_seconds = max(0.25, safe_float(self.mic_scan_seconds_var.get(), 0.8))
         results = []
-        for idx, (label, device_index) in enumerate(devices, start=1):
+        for idx, (label, dev) in enumerate(devices, start=1):
             if self.scan_stop_event.is_set():
                 break
             self.root.after(0, lambda idx=idx, total=len(devices), label=label: self.mic_scan_status_var.set(f"Sweeping mic {idx}/{total}: {label}"))
             try:
-                rms, peak = self.measure_mic_device(device_index, scan_seconds)
+                rms, peak = self.measure_mic_device(dev, scan_seconds)
                 results.append((rms, peak, label))
                 self.root.after(0, lambda rms=rms, peak=peak, label=label: self.add_mic_sweep_result(rms, peak, label))
             except Exception as e:
                 self.root.after(0, lambda label=label, e=e: self.add_mic_sweep_result(0.0, 0.0, f"{label} [failed: {e}]"))
 
         if results and not self.scan_stop_event.is_set():
-            results.sort(key=lambda x: x[0], reverse=True)
+            results.sort(key=lambda x: audio_score(x[0], x[1]), reverse=True)
             rms, peak, label = results[0]
             self.root.after(0, lambda: self.select_mic_sweep_winner(label, rms, peak))
         self.root.after(0, lambda: self.mic_scan_button.configure(text="Sweep mic"))
 
-    def measure_mic_device(self, device_index, seconds):
-        dev_info = sd.query_devices(device_index) if device_index is not None else sd.query_devices(kind="input")
-        source_rate = int(float(dev_info.get("default_samplerate", 48000) or 48000))
-        channels = max(1, min(2, int(dev_info.get("max_input_channels", 1) or 1)))
+    def measure_mic_device(self, dev, seconds):
+        if not dev:
+            return 0.0, 0.0
+
+        index = int(dev["index"])
+        channels = max(1, min(2, int(dev.get("maxInputChannels", 1) or 1)))
+        source_rate = int(float(dev.get("defaultSampleRate", 48000) or 48000))
         frames = max(256, int(source_rate * 0.10))
         chunks = []
 
-        def callback(indata, frames, time_info, status):
-            data = np.asarray(indata, dtype=np.float32)
-            mono = data.mean(axis=1) if data.ndim == 2 else data
-            chunks.append(mono.copy())
-
-        with sd.InputStream(
-            samplerate=source_rate,
-            channels=channels,
-            dtype="float32",
-            blocksize=frames,
-            device=device_index,
-            callback=callback,
-        ):
-            end = time.time() + seconds
-            while time.time() < end and not self.scan_stop_event.is_set():
-                time.sleep(0.05)
+        with pyaudio.PyAudio() as p:
+            stream = p.open(
+                format=pyaudio.paInt16,
+                channels=channels,
+                rate=source_rate,
+                frames_per_buffer=frames,
+                input=True,
+                input_device_index=index,
+            )
+            try:
+                end = time.time() + seconds
+                while time.time() < end and not self.scan_stop_event.is_set():
+                    data = stream.read(frames, exception_on_overflow=False)
+                    chunks.append(mono_from_int16_bytes(data, channels))
+            finally:
+                stream.stop_stream()
+                stream.close()
 
         if not chunks:
             return 0.0, 0.0
@@ -938,7 +1001,7 @@ class LoCaptApp:
                 self.root.after(0, lambda label=label, e=e: self.add_sweep_result(0.0, 0.0, f"{label} [failed: {e}]"))
 
         if results and not self.scan_stop_event.is_set():
-            results.sort(key=lambda x: x[0], reverse=True)
+            results.sort(key=lambda x: audio_score(x[0], x[1]), reverse=True)
             rms, peak, label = results[0]
             self.root.after(0, lambda: self.select_sweep_winner(label, rms, peak))
         self.root.after(0, lambda: self.scan_button.configure(text="Sweep"))
